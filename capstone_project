@@ -1,0 +1,113 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+from pyspark.sql.types import IntegerType
+
+spark = SparkSession.builder.appName( 'Read CSV File into DataFrame' ).getOrCreate()
+
+authors = spark.read.csv( 'dataset_Facebook_cos.csv', sep=',', inferSchema=True, header=True )
+df = authors.toPandas()
+print( df.head() )
+df_pyspark1 = spark.read.option( 'header', 'true' ).csv( 'dataset_Facebook_cos.csv' )
+print( df_pyspark1.show() )
+print( df_pyspark1.printSchema() )
+print( df_pyspark1.columns )
+df_pyspark = (df_pyspark1.withColumn( "Page total likes", col( "Page total likes" ).cast( IntegerType() ) ))
+print( df_pyspark.printSchema() )
+
+# Lab Tasks:
+# 1. The total number of posts made
+print( "total number of posts made:", df_pyspark.count() )
+
+# 2. The percentage of the growth or decline of the page, in terms of likes
+# (subscriptions on the page), from the first post to the latest post
+
+# first find the diff between latest and first record
+
+# print(df_pyspark.first()['Page total likes']) #How do you get the first value of a column in Pyspark?
+# first_record = df_pyspark.collect()[0]['Page total likes']
+# last_record = df_pyspark.collect()[-1]['Page total likes']
+difference = df_pyspark.collect()[0]['Page total likes'] - df_pyspark.collect()[-1]['Page total likes']
+# print(difference)
+increase = ((df_pyspark.collect()[0]['Page total likes'] - df_pyspark.collect()[-1]['Page total likes']) /
+            df_pyspark.collect()[-1]['Page total likes']) * 100
+print( "The percentage of the growth or decline of the page", increase )
+
+# Which month, on average, has the highest number of post interactions?
+print( df_pyspark.show() )
+df_orderby = df_pyspark.groupBy( "Post Month" ).agg( {"Total Interactions": "avg"} )
+print( df_orderby.show() )
+print( df_orderby.printSchema() )
+month_wise_highest_posts = df_orderby.orderBy( ['avg(Total Interactions)'], ascending=[False] )
+print( month_wise_highest_posts.show() )
+print( month_wise_highest_posts.printSchema() )
+print("which Month has the highest number of post interactions:",month_wise_highest_posts.head(1))
+#Which day of the week, on average, has the highest number of post interactions?
+print( df_pyspark.show())
+df_orderby = df_pyspark.groupBy("Post Weekday" ).agg( {"Total Interactions": "avg"} )
+print(df_orderby.show() )
+print( df_orderby.printSchema() )
+Week_wise_highest_posts = df_orderby.orderBy( ['avg(Total Interactions)'], ascending=[False] )
+print( Week_wise_highest_posts.show() )
+print( Week_wise_highest_posts.printSchema() )
+print("which Weekday has the highest number of post interactions:",Week_wise_highest_posts.head(1))
+
+# Which hour of the day, on average, has the highest number of post interactions?
+
+print( df_pyspark.show())
+df_orderby = df_pyspark.groupBy("Post Hour" ).agg( {"Total Interactions": "avg"} )
+print(df_orderby.show() )
+print( df_orderby.printSchema() )
+Hour_wise_highest_posts = df_orderby.orderBy( ['avg(Total Interactions)'], ascending=[False] )
+print( Hour_wise_highest_posts.show() )
+print( Hour_wise_highest_posts.printSchema() )
+print("which Hour has the highest number of post interactions:",Hour_wise_highest_posts.head(1))
+
+print( df_pyspark.show())
+df_share = df_pyspark.groupBy("Paid").agg( {"share": "sum"} )
+#as per my conclusion most shares happend by Organically promoted(i.e without paid)
+print("most shares happend by Organically promoted(i.e without paid",df_share.head(1))
+
+df_like_orderby = df_pyspark.groupBy("Type").agg( {"like": "sum"})
+type_wise_highest_likes = df_like_orderby.orderBy( ['sum(like)'], ascending=[False] )
+print(type_wise_highest_likes.show())
+print("Which post type"
+      " (photo, video, status, or link) is the most attractive to "
+      "people who have subscribed to your page (people who have liked the page):",
+      type_wise_highest_likes.head(1))
+#Create an additional column with the name Likes-to-comment Ratio, with the
+df_likes_to_comment_ratio=df_pyspark.withColumn("Likes-to-comment Ratio",col('like')/col('comment'))
+print(df_likes_to_comment_ratio.printSchema())
+df_likes_to_comment_ratio.select("*",round("Likes-to-comment Ratio",2)).show() # Make sure the ratio is in a decimal format, and correct it to 2 decimal places
+
+#Arrange post categories (1,2,3) in the descending order of the reach that they
+#can accumulate on average
+
+df_categories = df_pyspark.groupBy("Category").agg( {"Lifetime Post Total Reach": "avg"})
+print(df_categories.show())
+df_categories_orderby = df_categories.orderBy( ['avg(Lifetime Post Total Reach)'], ascending=[False] )
+print(df_categories_orderby.show())
+
+#Determine the standard deviation of the average post reach for each of the day
+#hours. This is to determine if the time of the day is an ideal criterion to identify
+#when to create posts
+df_average_post_std = df_pyspark.groupBy("Post Weekday","Post Hour").agg( {"Lifetime Post Total Reach": "stddev_samp"})
+print(df_average_post_std.show())
+df_average_post_std.select("*",round("stddev_samp(Lifetime Post Total Reach)",2)).show()
+
+#calculating correlation between the two variables
+
+print(df_pyspark.show())
+print(df_pyspark.printSchema())
+# df_pyspark1 = (df_pyspark.withColumn( "Lifetime Post Consumptions", col( "Lifetime Post Consumptions" ).cast( IntegerType()) )
+#                ( "Total Interactions", col( "Total Interactions" ).cast( IntegerType() ) )))
+# print(df_pyspark1.printSchema())
+# df_pyspark1 = (df_pyspark.withColumn( "Total Interactions", col( "Total Interactions" ).cast( IntegerType() ) ))
+# print(df_pyspark1.printSchema())
+#
+# df_pyspark1.stat.corr('Total Interactions')
+
+from pyspark.sql.types import IntegerType
+df2 = df_pyspark.withColumn("Lifetime Post Consumptions",col("Lifetime Post Consumptions").cast(IntegerType())) \
+    .withColumn("Total Interactions",col("Total Interactions").cast(IntegerType()))
+print(df2.printSchema())
+print("The correlation value is:",df2.stat.corr('Lifetime Post Consumptions','Total Interactions'))
